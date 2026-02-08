@@ -1,0 +1,128 @@
+import torch
+import numpy as np
+import argparse
+
+from config import (CONTEXT_LEN, NUM_FEATURES, PREDICTION_LEN, HIDDEN_SIZE, RNN_LAYERS,
+                    DEEPAR_MODEL_PATH, REPS_PER_MEASUREMENT, POPULATION_SIZE,
+                    ENERGY_SAMPLE_INTERVAL, VERIFICATION_REPS)
+from utils.model_loader import load_seed, get_device
+from utils.power_monitor import PowerMonitor
+from utils.metrics import measure_energy
+from utils.ga_operators import time_slice_crossover, energy_sponge_mutation, create_energy_population
+from utils.attack_runner import AttackHistory, create_ga, run_ga, print_results
+from utils.visualization import plot_ga_evolution
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--model", type=str, choices=["chronos", "deepar", "patchtst"], default="chronos")
+parser.add_argument("--mode", type=str, choices=["constrained", "extreme"], default="extreme")
+parser.add_argument("--generations", type=int, default=50)
+args = parser.parse_args()
+
+MODEL_TYPE = args.model
+
+print("="*70)
+print("ENERGY SPONGE ATTACK - Maximizing GPU Power Consumption")
+print("="*70)
+print(f"Model: {MODEL_TYPE.upper()} | Mode: {args.mode.upper()}")
+
+device = get_device()
+power_monitor = PowerMonitor(ENERGY_SAMPLE_INTERVAL)
+
+model = None
+pipeline = None
+
+if MODEL_TYPE == "chronos":
+    from chronos import ChronosPipeline
+    pipeline = ChronosPipeline.from_pretrained("amazon/chronos-t5-base", device_map=device, torch_dtype=torch.float32)
+elif MODEL_TYPE == "deepar":
+    from utils.model_loader import load_deepar, make_predictor
+    model, _ = load_deepar(device=device)
+
+seed_data, mean, std = load_seed()
+flat_seed = seed_data.flatten()
+
+
+def make_prediction(input_array):
+    if MODEL_TYPE == "chronos":
+        if len(input_array.shape) == 2:
+            univariate = input_array[:, 0]
+        else:
+            univariate = input_array
+        inp = torch.tensor(univariate, dtype=torch.float32)
+        pipeline.predict(inp, prediction_length=PREDICTION_LEN)
+    elif MODEL_TYPE == "deepar":
+        x = torch.tensor(input_array, dtype=torch.float32).unsqueeze(0).to(device)
+        with torch.no_grad():
+            model(x)
+
+
+print("\nMeasuring baseline...")
+baseline_stats = measure_energy(make_prediction, seed_data, power_monitor, device, num_reps=20)
+BASELINE_POWER = baseline_stats['avg_power']
+BASELINE_ENERGY = baseline_stats['energy_per_inference']
+BASELINE_CPU = baseline_stats['cpu_time_per_inference']
+BASELINE_LATENCY = baseline_stats['latency']
+print(f"Baseline Power: {BASELINE_POWER:.1f}W, Energy: {BASELINE_ENERGY*1000:.3f}mJ")
+
+history = AttackHistory()
+
+
+def fitness_func(ga_instance, solution, solution_idx):
+    input_array = solution.reshape(CONTEXT_LEN, NUM_FEATURES).astype(np.float32)
+    stats = measure_energy(make_prediction, input_array, power_monitor, device, REPS_PER_MEASUREMENT)
+    power_ratio = stats['avg_power'] / BASELINE_POWER if BASELINE_POWER > 0 else 1.0
+    cpu_ratio = stats['cpu_time_per_inference'] / BASELINE_CPU if BASELINE_CPU > 0 else 1.0
+    if power_monitor.gpu_available:
+        fitness = 0.7 * power_ratio + 0.3 * cpu_ratio
+    else:
+        lat_ratio = stats['latency'] / BASELINE_LATENCY if BASELINE_LATENCY > 0 else 1.0
+        fitness = 0.6 * cpu_ratio + 0.4 * lat_ratio
+    history.record_solution(fitness, solution, power=stats['avg_power'],
+                            energy=stats['energy_per_inference'], latency=stats['latency'])
+    return float(fitness)
+
+
+def on_generation(ga_instance):
+    gen = ga_instance.generations_completed
+    best = history.end_generation(gen, extra_columns={
+        'best_power': 'power', 'best_energy': 'energy', 'best_latency': 'latency',
+        'global_best_fitness': 'fitness'
+    })
+    if best:
+        power_change = ((best['power'] / BASELINE_POWER) - 1) * 100 if BASELINE_POWER > 0 else 0
+        print(f"Gen {gen:3d}: Fitness={best['fitness']:.4f} (Power {power_change:+.1f}%)")
+
+
+initial_population, gene_space = create_energy_population(flat_seed, POPULATION_SIZE, args.mode)
+
+ga_instance = create_ga(
+    fitness_func=fitness_func, on_generation=on_generation,
+    num_genes=len(flat_seed), num_generations=args.generations,
+    initial_population=initial_population, gene_space=gene_space,
+    crossover_type=time_slice_crossover, mutation_type=energy_sponge_mutation,
+)
+
+if __name__ == "__main__":
+    best_solution, _ = run_ga(ga_instance, f"{MODEL_TYPE.upper()} Energy Sponge Attack")
+
+    adv_input = best_solution.reshape(CONTEXT_LEN, NUM_FEATURES).astype(np.float32)
+    verify_adv = measure_energy(make_prediction, adv_input, power_monitor, device, VERIFICATION_REPS)
+    verify_base = measure_energy(make_prediction, seed_data, power_monitor, device, VERIFICATION_REPS)
+
+    print_results("ENERGY SPONGE ATTACK", [
+        ("Power (W)", verify_base['avg_power'], verify_adv['avg_power'], "{:.1f}"),
+        ("Energy (mJ)", verify_base['energy_per_inference'] * 1000, verify_adv['energy_per_inference'] * 1000, "{:.3f}"),
+    ])
+
+    prefix = f"{MODEL_TYPE}_energy_sponge"
+    history.save(prefix)
+
+    plot_ga_evolution(history.generation_data,
+                      {'power': BASELINE_POWER, 'energy': BASELINE_ENERGY, 'latency': BASELINE_LATENCY},
+                      [
+                          {'data_key': 'global_best_fitness', 'ylabel': 'Fitness', 'title': 'Fitness Evolution'},
+                          {'data_key': 'best_power', 'ylabel': 'Power (W)', 'title': 'Power Evolution', 'baseline_key': 'power'},
+                          {'data_key': 'best_energy', 'ylabel': 'Energy (mJ)', 'title': 'Energy Evolution', 'scale': 1000, 'baseline_key': 'energy'},
+                          {'data_key': 'best_latency', 'ylabel': 'Latency (ms)', 'title': 'Latency (should be flat)', 'color': 'c', 'scale': 1000, 'baseline_key': 'latency'},
+                      ],
+                      f'{MODEL_TYPE.upper()} Energy Sponge Attack Results', f"{prefix}_results.png")
