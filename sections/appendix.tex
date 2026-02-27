@@ -1,0 +1,45 @@
+\appendices
+\section{Supplementary Figures}
+\label{sec:appendix}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{act_pgd_latency_results.png}
+    \caption{\textbf{Latency Attack Convergence (PGD).} (Left) The loss increases steadily over 200 PGD steps. (Right) Baseline vs. adversarial comparison: latency increases from 47.99ms to 55.74ms (+16\%).}
+    \label{fig:latency_res}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{act_pgd_energy_results.png}
+    \caption{\textbf{Energy Attack Convergence (PGD).} The attack increases total energy consumption from 818mJ to 1024mJ (+25\%) while the instantaneous power draw (Watts) remains constant, confirming a time-domain sponge effect.}
+    \label{fig:energy_res}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{act_ponder_correlation.png}
+    \caption{\textbf{Mechanism of Latency.} (Right) Correlation analysis reveals that the Halting Unit is most sensitive to the 'Power' feature ($r=0.4$). (Left) Scatter plot showing that while the attack is stochastic, perturbations generally push the model towards a specific 'uncertainty manifold' where ponder depth is maximized.}
+    \label{fig:correlations}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{act_bitflip_results.png}
+    \caption{\textbf{ACT-LSTM Bit-Flip Attack.} The GA evolves inputs that increase switching activity by 26.8\% over the baseline (64,859 $\rightarrow$ 82,237 flips). The faded line shows per-generation best; the bold line tracks the global best.}
+    \label{fig:act_bitflip}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{deepar_bitflip_results.png}
+    \caption{\textbf{DeepAR Bit-Flip GA Trajectory.} Despite its static computation graph, the GA achieves a 25.2\% increase in bit-flip transitions (261,690 $\rightarrow$ 327,730 flips). The faded line shows per-generation best; the bold line tracks the global best.}
+    \label{fig:deepar_bitflip}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{chronos_bitflip_results.png}
+    \caption{\textbf{Chronos-v2 Bit-Flip GA Trajectory.} The large embedding layer produces 28.4M baseline flips; the GA increases this to 38.7M (+36.5\%). The faded line shows per-generation best; the bold line tracks the global best.}
+    \label{fig:chronos_bitflip}
+\end{figure}

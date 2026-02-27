@@ -1,0 +1,43 @@
+\section{System Overview and Threat Model}
+\label{sec:threat_model}
+
+We formally define the Smart Grid forecasting environment, the specific dynamic architectures targeted, and the adversarial capabilities assumed in our worst-case analysis.
+
+\subsection{Smart Grid Control Loop}
+Consider a grid control node (e.g., a frequency regulator) that operates in discrete time steps $T$. At each step, the system receives a multivariate time-series input $X_t \in \mathbb{R}^{F \times W}$ (where $F$ is the number of features and $W$ is the history window) and relies on a deep learning model $f_\theta$ to predict the power generation $Y_{t+1}$.
+\begin{equation}
+    Y_{t+1} = f_\theta(X_t)
+\end{equation}
+Crucially, the control action $u_t$ must be computed and applied within a strict dispatch window $\tau_{max}$ (e.g., 300ms for primary frequency response). If the inference latency $L(f_\theta(X_t)) > \tau_{max}$, the control loop opens, leading to uncompensated frequency deviation.
+
+\subsection{Target Dynamics: ACT-LSTM}
+We focus on the Adaptive Computation Time (ACT) LSTM, which introduces dynamic depth. For an input $x_t$, the model executes an internal recurrence loop for $N(x_t)$ steps. The halting condition is governed by a sigmoidal halting unit $h$:
+\begin{equation}
+    N(x_t) = \min \{ n : \sum_{k=1}^{n} h(s_k) \ge 1 - \epsilon \}
+\end{equation}
+where $s_k$ is the internal state at ponder step $k$. This creates a variable computational cost $C(x) \propto N(x)$. Our specific target is to find an input $x^*$ that maximizes $N(x^*)$ up to a hard limit $M$.
+
+\subsection{Reference Architectures (Static Baselines)}
+To validate the unique vulnerability of dynamic compute, we contrast the ACT-LSTM against two static baselines where the computational cost $C(x)$ is constant:
+\begin{itemize}
+    \item \textbf{DeepAR (RNN):} A standard stacked LSTM where the unrolling depth is fixed to the input window size $W$. The inference time is $O(W)$ regardless of input complexity.
+    \item \textbf{Chronos-v2 (Transformer):} A foundation model that utilizes input quantization and fixed-length attention masks. Despite the theoretical $O(W^2)$ complexity of attention, the implementation enforces a deterministic execution path, rendering $L(f_\theta(x)) \approx \text{const}$.
+\end{itemize}
+
+\subsection{Threat Model Formulation}
+We adopt a comprehensive threat model considering both black-box and white-box capabilities to establish lower and upper bounds on vulnerability.
+
+\subsubsection{Adversary Goals ($\mathcal{G}$)}
+The adversary $\mathcal{A}$ aims to violate the availability property of the grid.
+\begin{itemize}
+    \item \textbf{Primary Goal:} Maximize Latency. Find $\delta$ such that $L(f_\theta(X + \delta)) > \tau_{max}$.
+    \item \textbf{Secondary Goal:} Maximize Energy. Maximize $\int P(t) dt$ to drain battery-powered edge sensors. In addition to prolonging computation time, the adversary may target dynamic power dissipation directly by maximizing bit-level switching activity in the first computation layer ($P_{dyn} \propto \alpha C V^2 f$).
+    \item \textbf{Constraint:} Stealthiness. The perturbation must remain undetectable: $||\delta||_p < \epsilon_{noise}$ and the input must satisfy physical constraints (e.g., Wind Speed $\ge 0$).
+\end{itemize}
+
+\subsubsection{Adversary Knowledge ($\mathcal{K}$)}
+We define two distinct threat profiles:
+\begin{itemize}
+    \item $\mathcal{K}_{BB}$ (Black-Box): The attacker knows the architecture (ACT-LSTM) and input format but has no access to weights $\theta$ or gradients. They rely on query-access to measure latency.
+    \item $\mathcal{K}_{WB}$ (White-Box): The attacker has full access to $\theta$ and $\nabla_\theta$. This represents a "Worst-Case" scenario (e.g., an insider threat or leaked model) used to calculate the theoretical maximum latency.
+\end{itemize}

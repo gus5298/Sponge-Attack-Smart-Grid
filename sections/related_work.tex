@@ -1,0 +1,75 @@
+\section{Related Work}
+\label{sec:related}
+
+This section reviews the current state of Artificial Intelligence (AI) integration within the Smart Grid, follows with an analysis of the fundamental mechanics of Sponge Attacks, and concludes with recent advancements in Sponge Poisoning and Moving Target Defense (MTD).
+
+\subsection{AI in Smart Grid Systems}
+The transition to the Smart Grid has necessitated the deployment of learning-based components to handle the stochastic nature of renewable energy generation and variable consumer demand. S{\'a}nchez et al. \cite{sanchez2024attacking} highlight that these models are ubiquitous, appearing in critical use cases such as energy demand prediction, anomaly detection for cybersecurity, and preventative maintenance.
+
+For instance, Recurrent Neural Networks (RNNs) and Long Short-Term Memory (LSTM) networks are standard for time-series load forecasting due to their ability to capture temporal dependencies. Simultaneously, Convolutional Neural Networks (CNNs) \cite{sanchez2024attacking, shapira2023phantom} are increasingly used for visual inspection of grid infrastructure (e.g., drone-based power line monitoring). However, the security of these models is often overlooked. While most research focuses on \textit{integrity attacks}—where an adversary manipulates smart meter data to lower bills or hide consumption spikes—\textit{availability attacks} that target the underlying hardware resources remain under-explored in the specific context of grid infrastructure.
+
+\subsection{Sponge Examples: Inference-Time Attacks}
+The concept of Sponge Examples was formally introduced by Shumailov et al. \cite{shumailov2021sponge} as a novel Denial-of-Service (DoS) vector against machine learning models. Unlike adversarial examples that aim for misclassification, sponge examples are optimized to maximize the energy consumption and inference latency of a model.
+
+Shumailov et al. identify two primary dimensions of computation that adversaries can exploit:
+\begin{itemize}
+    \item \textbf{Computation Depth:} For models with dynamic execution paths (e.g., language models or RNNs used in sequencing), an attacker can craft inputs that force the model to process the maximum number of tokens or steps, preventing early-exit optimizations.
+    \item \textbf{Data Sparsity:} Many hardware accelerators (GPUs/TPUs) utilize optimizations like zero-skipping to avoid performing multiplications with zero-valued inputs. Sponge examples are crafted to be dense (few zeros), thereby disabling these hardware optimizations and increasing the arithmetic load.
+\end{itemize}
+
+In the domain of computer vision, which is relevant for grid surveillance, Shapira et al. \cite{shapira2023phantom} demonstrated attacks against object detectors. They exploited the Non-Maximum Suppression (NMS) algorithm—a post-processing step used to filter overlapping bounding boxes. By generating "Phantom Sponges" that trigger a worst-case number of candidate boxes, they successfully increased inference latency without altering the visual content significantly.
+
+\subsection{Explainable AI (XAI) as an Attack Vector}
+Explainable AI (XAI) methods, such as SHAP and Integrated Gradients (IG), were originally designed to build trust by highlighting which input features contribute to a model's prediction. However, recent research has demonstrated that these same tools can be weaponized by adversaries to identify model vulnerabilities.
+
+\subsubsection{XAI for Integrity Attacks}
+S{\'a}nchez et al. \cite{sanchez2024attacking} utilized feature attribution maps to craft more potent adversarial examples against smart grid intrusion detection systems. By perturbing only the features with the highest Gini importance, they achieved high evasion rates with minimal input distortion.
+
+\subsubsection{XAI for Model Stealing}
+In a parallel domain, \cite{steganographic2026} demonstrated that XAI can facilitate model extraction. By analyzing the gradient maps of a target network, attackers can infer the architecture's depth and kernel size. Our work extends this "weaponized XAI" paradigm to availability attacks: we use IG not to interpret the model's \textit{output}, but to interpret its \textit{execution time}, effectively reverse-engineering the logical trigger conditions of the halting unit.
+
+% --- TABLE I: TAXONOMY ---
+\begin{table*}[t]
+    \centering
+    \caption{Taxonomy of Sponge Attacks and their Potential Impact on Smart Grid Infrastructure.}
+    \label{tab:literature_review}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{l p{3cm} p{3.5cm} p{4cm} p{3cm}}
+        \toprule
+        \textbf{Reference} & \textbf{Attack Technique} & \textbf{Target Mechanism} & \textbf{Smart Grid Vulnerability} & \textbf{Grid Impact} \\
+        \midrule
+        Shumailov et al. \cite{shumailov2021sponge} & Sponge Examples (Inference) & Computation Depth (NLP) \& Sparsity (Vision) & Centralized Forecasting Servers (LSTMs/Transformers) & Delayed dispatch decisions; Real-time pricing lag. \\
+        \hline
+        Shapira et al. \cite{shapira2023phantom} & Phantom Sponges & Non-Maximum Suppression (Object Detection) & Autonomous Inspection Drones (YOLO/R-CNN) & Battery exhaustion; Unfinished inspection routes. \\
+        \hline
+        Cinà et al. \cite{cina2022sponge} & Sponge Poisoning & Training-time Loss Manipulation & Edge Devices (Smart Meters) & Hardware thermal throttling; Denial of Service (DoS). \\
+        \hline
+        Te Lintelo et al. \cite{telintelo2024skip} & SkipSponge & Weight Poisoning (Reducing Sparsity) & Resource-Constrained IoT Sensors & Increased base-load energy consumption. \\
+        \hline
+        \textbf{This Work} & \textbf{GA + PGD + Bit-Flip Oracle} & \textbf{Dynamic Control Flow \& Switching Activity} & \textbf{Adaptive Forecasting (ACT-LSTM, DeepAR, Chronos)} & \textbf{1.5x Latency; +25--36\% energy (switching).} \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsection{Sponge Poisoning: Training-Time Attacks}
+While standard sponge examples require altering the input at inference time, recent research has explored Sponge Poisoning, where the model itself is compromised during the training or update phase.
+
+Cinà et al. \cite{cina2022sponge} explored this in the context of edge devices, which is highly relevant for smart meters and IoT sensors. They demonstrated that by injecting a small percentage of poisoned data into the training set, an attacker can alter the model's objective function to prefer computationally expensive paths.
+
+More recently, Te Lintelo et al. \cite{telintelo2024skip} introduced \textit{SkipSponge}, a technique that targets the weights of pre-trained models directly. This method is particularly stealthy as it requires fewer data samples than traditional poisoning. By manipulating the weights to reduce the sparsity of intermediate activations, SkipSponge forces the hardware to perform more calculations, effectively turning a standard efficient model into an energy drain.
+
+\subsection{Sensing AI and IoT Vulnerabilities}
+The impact of sponge attacks is most severe on battery-constrained devices. Recent work in 2025 has shifted focus from cloud servers to "Sensing AI" (wearable and IoT sensors).
+
+Hasan et al. \cite{hasan2025sensing} conducted a systematic study on wearable AI. They found that sponge attacks on these devices lead to rapid battery depletion and thermal throttling, effectively taking the sensor offline. This is directly analogous to the risk facing Smart Meters (AMI) in the grid. Their work suggests that standard model compression techniques, such as \textbf{Model Pruning}, can inadvertently serve as a defense by reducing the overall capacity available to be "sponged," though this comes at an accuracy trade-off.
+
+\subsection{Mitigation Strategies}
+Defending against availability attacks requires different paradigms than integrity defenses.
+
+\subsubsection{Static Defenses}
+Proposed mitigations include \textbf{Fine-Pruning} \cite{telintelo2024skip}, which attempts to "heal" a poisoned model by pruning and re-training affected weights, and \textbf{Input Filtering}, which rejects samples with abnormal energy profiles. However, filters can often be bypassed by adaptive adversaries who optimize for both latency and stealth (as we demonstrate in Section \ref{sec:experiments}).
+
+\subsubsection{Moving Target Defense (MTD)}
+A promising direction in Smart Grid security is Moving Target Defense (MTD), which dynamically randomizes system configurations to invalidate attacker knowledge. S{\'a}nchez et al. \cite{sanchez2025lightweight} proposed a lightweight MTD that randomizes Modbus TCP slave addresses to prevent network intrusion, maintaining 95\% detection accuracy.
+
+However, we argue that \textbf{Network-level MTD is insufficient for Model-level availability}. While randomizing IP addresses protects the transport layer, it does not protect the compute layer once a request is authenticated. If the underlying forecasting model remains static, an authenticated adversary can still inject sponge inputs. A true "AI-MTD" would require randomizing the neural architecture itself (e.g., switching between ensemble members with different halting policies).

@@ -1,0 +1,15 @@
+\section{Future Research Directions}
+\label{sec:future}
+
+This work established the baseline vulnerability of dynamic grid AI to inference-time sponge attacks. However, the intersection of AI safety and grid hardware presents several open challenges for future investigation.
+
+\subsection{Federated Sponge Poisoning}
+Smart Grids are increasingly adopting Federated Learning (FL) to preserve prosumer privacy. In this paradigm, edge devices (smart meters) train local models and send weight updates $\Delta w$ to a central aggregator.
+A malicious prosumer could execute a \textit{Sponge Poisoning Attack} by submitting crafted updates that maximize the energy consumption of the global model. Unlike data poisoning, this attack does not degrade accuracy, making it invisible to standard malicious robust aggregators (e.g., Krum or Median). Future work should investigate "Energy-Audit Aggregation" mechanisms that verify the computational cost of weight updates before integration.
+
+\subsection{Hardware-Specific Thermal Attacks}
+Our experiments focused on algorithmic latency ($O(N)$ complexity). However, a more insidious vector is the \textit{Thermal Sponge}.
+\begin{itemize}
+    \item \textbf{Mechanism:} An attacker could identify inputs that trigger high-intensity matrix operations (e.g., dense AVX instructions) at the resonant frequency of the edge device's heat sink.
+    \item \textbf{Impact:} This would force the device's Dynamic Voltage and Frequency Scaling (DVFS) governor to throttle the CPU frequency to prevent overheating. In a substation environment, such "thermal toggling" could not only cause latency spikes but also physically degrade the silicon lifespan of critical controllers (e.g., NVIDIA Jetsons or Raspberry Pis used in microgrids).
+\end{itemize}
