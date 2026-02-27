@@ -1,2 +1,15 @@
 CLAUDE.md
 .claude/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.out
+
+# Compiled PDF
+main.pdf
+
+# Archives
+*.zip
