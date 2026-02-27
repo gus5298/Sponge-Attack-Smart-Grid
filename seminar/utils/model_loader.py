@@ -62,6 +62,15 @@ def load_seed_from_csv(data_path=None, context_len=None):
     return seed_data, mean, std
 
 
+def load_chronos(device=None):
+    from chronos import ChronosPipeline
+    device = device or get_device()
+    pipeline = ChronosPipeline.from_pretrained(
+        "amazon/chronos-t5-small", device_map=device, torch_dtype=torch.float32
+    )
+    return pipeline
+
+
 def make_predictor(model, device=None):
     device = device or get_device()
 

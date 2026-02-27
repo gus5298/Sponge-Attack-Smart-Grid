@@ -161,6 +161,43 @@ def create_latency_population(flat_seed, pop_size, mode):
     return np.array(population, dtype=np.float32), gene_space
 
 
+def uniform_crossover(parents, offspring_size, ga_instance):
+    """Each gene independently chosen from either parent (50/50)."""
+    offspring = []
+    idx = 0
+    while len(offspring) < offspring_size[0]:
+        p1 = parents[idx % parents.shape[0], :]
+        p2 = parents[(idx + 1) % parents.shape[0], :]
+        mask = np.random.random(len(p1)) < 0.5
+        child = np.where(mask, p1, p2)
+        offspring.append(child)
+        idx += 1
+    return np.array(offspring)
+
+
+def bitflip_mutation(offspring, ga_instance):
+    """Bit-level mutation for bit-flip maximization.
+
+    Flips 1-3 random bits in the IEEE 754 float32 representation of each
+    mutated gene. This makes small, targeted changes that allow the GA to
+    progressively optimize bit patterns against fixed weights.
+    """
+    mutation_rate = 0.10
+    for idx in range(offspring.shape[0]):
+        for gene_idx in range(offspring.shape[1]):
+            if np.random.random() < mutation_rate:
+                float_arr = np.array([offspring[idx, gene_idx]], dtype=np.float32)
+                int_arr = float_arr.view(np.uint32)
+                n_flips = np.random.randint(1, 4)
+                for _ in range(n_flips):
+                    bit_pos = int(np.random.randint(0, 32))
+                    int_arr[0] ^= np.uint32(1 << bit_pos)
+                new_val = int_arr.view(np.float32)[0]
+                if np.isfinite(new_val):
+                    offspring[idx, gene_idx] = new_val
+    return offspring
+
+
 def create_bitflip_population(flat_seed, pop_size):
     n = len(flat_seed)
     population = []

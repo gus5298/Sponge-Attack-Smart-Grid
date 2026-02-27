@@ -1,5 +1,8 @@
+import os
 import warnings
 warnings.filterwarnings("ignore")
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CONTEXT_LEN = 64
 PREDICTION_LEN = 10
@@ -14,9 +17,11 @@ MAX_PONDERS = 20
 TIME_PENALTY = 0.01
 ACT_HIDDEN_SIZE = 128
 
-DATA_PATH = "data/Location1.csv"
-DEEPAR_MODEL_PATH = "deepar_model.pt"
-ACT_MODEL_PATH = "act_model.pt"
+DATA_PATH = os.path.join(_BASE_DIR, "data", "Location1.csv")
+OUTPUT_DIR = os.path.join(_BASE_DIR, "outputs")
+MODELS_DIR = os.path.join(OUTPUT_DIR, "models")
+DEEPAR_MODEL_PATH = os.path.join(MODELS_DIR, "deepar_model.pt")
+ACT_MODEL_PATH = os.path.join(MODELS_DIR, "act_model.pt")
 
 POPULATION_SIZE = 20
 NUM_PARENTS_MATING = 10

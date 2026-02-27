@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from config import ALL_FEATURES
@@ -22,9 +23,12 @@ def load_seed_data(data_path, context_len, norm_params=None):
     seed_data = (seed_data_raw - mean) / std
     return seed_data, mean, std
 
-def load_all_locations(data_dir="data"):
+def load_all_locations(data_dir=None):
     import glob
-    csv_files = sorted(glob.glob(f"{data_dir}/Location*.csv"))
+    if data_dir is None:
+        from config import _BASE_DIR
+        data_dir = os.path.join(_BASE_DIR, "data")
+    csv_files = sorted(glob.glob(os.path.join(data_dir, "Location*.csv")))
     all_dfs = []
     for csv_file in csv_files:
         df = pd.read_csv(csv_file)

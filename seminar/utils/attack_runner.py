@@ -1,3 +1,4 @@
+import os
 import time
 import numpy as np
 import pygad
@@ -46,14 +47,17 @@ class AttackHistory:
         self.current_gen_solutions = []
         return best
 
-    def save(self, prefix):
+    def save(self, prefix, output_dir="."):
+        os.makedirs(output_dir, exist_ok=True)
+        def path(f):
+            return os.path.join(output_dir, f)
         best_sol = self.global_best.get('solution')
         if best_sol is not None:
-            np.save(f"{prefix}_best_input.npy", best_sol)
+            np.save(path(f"{prefix}_best_input.npy"), best_sol)
         if self.generation_data:
-            np.savez(f"{prefix}_generation_data.npz", **self.generation_data)
+            np.savez(path(f"{prefix}_generation_data.npz"), **self.generation_data)
         for i, hof in enumerate(self.hall_of_fame):
-            np.save(f"{prefix}_hof_{i+1}.npy", hof['solution'])
+            np.save(path(f"{prefix}_hof_{i+1}.npy"), hof['solution'])
 
 
 def safe_ratio(numerator, denominator):
@@ -77,7 +81,8 @@ def print_results(title, metrics):
 
 
 def create_ga(fitness_func, on_generation, num_genes, num_generations,
-              initial_population, crossover_type, mutation_type, gene_space=None):
+              initial_population, crossover_type, mutation_type, gene_space=None,
+              keep_elitism=None):
     return pygad.GA(
         num_generations=num_generations,
         num_parents_mating=NUM_PARENTS_MATING,
@@ -91,7 +96,7 @@ def create_ga(fitness_func, on_generation, num_genes, num_generations,
         initial_population=initial_population,
         gene_space=gene_space,
         on_generation=on_generation,
-        keep_elitism=KEEP_ELITISM,
+        keep_elitism=keep_elitism if keep_elitism is not None else KEEP_ELITISM,
         suppress_warnings=True
     )
 

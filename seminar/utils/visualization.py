@@ -17,8 +17,15 @@ def plot_ga_evolution(generation_data, baseline_values, panels, title, save_path
         color = panel.get('color', 'r')
         scale = panel.get('scale', 1.0)
 
-        values = [v * scale for v in generation_data[data_key]]
-        ax.plot(gens, values, f'{color}-', linewidth=2)
+        values = np.array([v * scale for v in generation_data[data_key]])
+        if panel.get('cummax', False):
+            ax.plot(gens, values, linestyle='-', color=color, linewidth=1, alpha=0.35,
+                    label='Per-generation best')
+            values = np.maximum.accumulate(values)
+            ax.plot(gens, values, linestyle='-', color=color, linewidth=2, label='Global best')
+            ax.legend(fontsize=8)
+        else:
+            ax.plot(gens, values, linestyle='-', color=color, linewidth=2)
 
         baseline_key = panel.get('baseline_key')
         if baseline_key and baseline_key in baseline_values:

@@ -1,12 +1,10 @@
 """
 BitFlipOracle: Software-based bit-flip estimation for sponge attacks.
 
-This module provides a differentiability-agnostic way to measure "hardware stress"
-by counting the number of bit-level transitions in the input data.
-
-Modes:
-    - blackbox: Counts transitions within the input tensor (step t vs t-1).
-    - whitebox: Counts bit differences between input and model weights (requires model access).
+This module measures "hardware stress" by counting bit-level differences
+between the input data and the model's first-layer weights (whitebox).
+The input is tiled to match the full weight matrix size, so flip counts
+scale with model size.
 """
 import torch
 import numpy as np
@@ -27,70 +25,40 @@ class BitFlipOracle:
     """
     Measures simulated 'hardware stress' via bit-flip counts.
 
-    This is used as a fitness metric for genetic algorithms attacking
-    models where standard power sensors are too noisy.
+    Compares input bits against first-layer weight bits. The input is
+    tiled (repeated) to cover the full weight matrix, so larger models
+    produce proportionally higher flip counts.
     """
 
-    def __init__(self, mode: str = "blackbox", model=None):
+    def __init__(self, model):
         """
         Initialize the oracle.
 
         Args:
-            mode: "blackbox" (input self-transitions) or "whitebox" (input vs weights).
-            model: PyTorch model (required for whitebox mode).
+            model: PyTorch model (required). First layer weights are cached.
         """
-        if mode not in ("blackbox", "whitebox"):
-            raise ValueError(f"Unknown mode: {mode}. Use 'blackbox' or 'whitebox'.")
-        self.mode = mode
+        if model is None:
+            raise ValueError("BitFlipOracle requires a model.")
         self.model = model
         self._first_layer_weights_bits = None
-
-        if mode == "whitebox":
-            if model is None:
-                raise ValueError("Whitebox mode requires a model.")
-            self._cache_first_layer_weights()
+        self._cache_first_layer_weights()
 
     def _cache_first_layer_weights(self):
         """Cache the bit representation of the first layer's weights."""
-        # Find the first layer with weights
         for name, param in self.model.named_parameters():
             if 'weight' in name and param.dim() >= 2:
                 weights_np = param.detach().cpu().numpy().flatten().astype(np.float32)
                 self._first_layer_weights_bits = weights_np.view(np.int32)
-                print(f"[BitFlipOracle] Cached weights from '{name}' (shape: {param.shape})")
+                print(f"[BitFlipOracle] Cached weights from '{name}' "
+                      f"(shape: {param.shape}, {len(self._first_layer_weights_bits)} elements)")
                 break
 
-    def count_flips_blackbox(self, input_array: np.ndarray) -> int:
-        """
-        Count bit flips between consecutive time steps in the input.
-
-        This simulates the transitions in the data bus as sequential
-        values are loaded into registers.
-
-        Args:
-            input_array: Shape (seq_len, num_features) or (batch, seq_len, num_features).
-
-        Returns:
-            Total number of bit flips across all transitions.
-        """
-        if input_array.ndim == 3:
-            input_array = input_array[0]  # Take first batch item
-
-        flat = input_array.flatten().astype(np.float32)
-        bits = flat.view(np.int32)
-
-        # XOR consecutive elements to find differing bits
-        xor_result = bits[:-1] ^ bits[1:]
-
-        # Count set bits in XOR result
-        flip_counts = _popcount32(xor_result)
-        return int(flip_counts.sum())
-
-    def count_flips_whitebox(self, input_array: np.ndarray) -> int:
+    def count_flips(self, input_array: np.ndarray) -> int:
         """
         Count bit flips between input and first-layer weights.
 
-        This represents the 'activity' in the first matrix multiplication.
+        The input is tiled to match the full weight vector length,
+        so flip count scales with model size.
 
         Args:
             input_array: Shape (seq_len, num_features) or (batch, seq_len, num_features).
@@ -99,7 +67,7 @@ class BitFlipOracle:
             Total number of bit differences.
         """
         if self._first_layer_weights_bits is None:
-            raise RuntimeError("No weights cached. Call _cache_first_layer_weights first.")
+            raise RuntimeError("No weights cached. First layer not found in model.")
 
         if input_array.ndim == 3:
             input_array = input_array[0]
@@ -107,27 +75,14 @@ class BitFlipOracle:
         flat = input_array.flatten().astype(np.float32)
         input_bits = flat.view(np.int32)
 
-        # Broadcast: compare each input element to subset of weights
-        min_len = min(len(input_bits), len(self._first_layer_weights_bits))
-        xor_result = input_bits[:min_len] ^ self._first_layer_weights_bits[:min_len]
+        # Tile input to match full weight matrix size
+        weight_len = len(self._first_layer_weights_bits)
+        reps = int(np.ceil(weight_len / len(input_bits)))
+        tiled = np.tile(input_bits, reps)[:weight_len]
 
+        xor_result = tiled ^ self._first_layer_weights_bits
         flip_counts = _popcount32(xor_result)
         return int(flip_counts.sum())
-
-    def count_flips(self, input_array: np.ndarray) -> int:
-        """
-        Count bit flips based on the configured mode.
-
-        Args:
-            input_array: Input data.
-
-        Returns:
-            Bit-flip count.
-        """
-        if self.mode == "blackbox":
-            return self.count_flips_blackbox(input_array)
-        else:
-            return self.count_flips_whitebox(input_array)
 
     def get_flip_ratio(self, input_array: np.ndarray, baseline_array: np.ndarray) -> float:
         """
@@ -146,32 +101,27 @@ class BitFlipOracle:
 
 
 def run_sanity_check():
-    """Quick sanity check to verify popcount logic."""
+    """Quick sanity check with a dummy model."""
+    import torch.nn as nn
+
     print("=" * 50)
     print("BitFlipOracle Sanity Check")
     print("=" * 50)
 
-    # Test 1: All zeros vs all ones
-    zeros = np.zeros(10, dtype=np.float32)
-    ones = np.ones(10, dtype=np.float32)
+    # Create a small dummy model
+    dummy_model = nn.Linear(10, 20)
 
-    oracle = BitFlipOracle(mode="blackbox")
+    oracle = BitFlipOracle(model=dummy_model)
 
-    flips_zeros = oracle.count_flips(zeros.reshape(10, 1))
-    flips_ones = oracle.count_flips(ones.reshape(10, 1))
-
-    print(f"Flips in constant zeros: {flips_zeros} (expected: 0)")
-    print(f"Flips in constant ones: {flips_ones} (expected: 0)")
-
-    # Test 2: Alternating pattern
-    alternating = np.array([0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0], dtype=np.float32)
-    flips_alt = oracle.count_flips(alternating.reshape(10, 1))
-    print(f"Flips in 0-1 alternating: {flips_alt} (expected: high)")
-
-    # Test 3: Random noise
+    # Test: Random noise
     noise = np.random.randn(100).astype(np.float32)
     flips_noise = oracle.count_flips(noise.reshape(100, 1))
-    print(f"Flips in random noise: {flips_noise}")
+    print(f"Flips in random noise (tiled to weights): {flips_noise}")
+
+    # Test: All zeros
+    zeros = np.zeros(100, dtype=np.float32)
+    flips_zeros = oracle.count_flips(zeros.reshape(100, 1))
+    print(f"Flips in zeros: {flips_zeros}")
 
     print("=" * 50)
     print("Sanity check complete!")

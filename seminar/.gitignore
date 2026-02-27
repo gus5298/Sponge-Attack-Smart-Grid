@@ -19,6 +19,22 @@
 !utils/
 !utils/**
 
+# Include attacks folder
+!attacks/
+!attacks/**
+
+# Include analysis folder
+!analysis/
+!analysis/**
+
+# Include visualization folder
+!visualization/
+!visualization/**
+
+# Include training folder
+!training/
+!training/**
+
 # Exclude Python cache
 __pycache__/
 *.pyc
