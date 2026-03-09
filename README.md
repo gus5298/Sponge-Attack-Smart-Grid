@@ -34,14 +34,14 @@ pip install torch pygad psutil matplotlib pandas numpy scipy transformers accele
 ### Docker
 
 ```bash
-docker build -t seminar seminar/
-docker run seminar                                    # trains DeepAR by default
-docker run seminar python attack_deepar_latency.py    # run a specific script
+docker build -t src src/
+docker run src                                    # trains DeepAR by default
+docker run src python attack_deepar_latency.py    # run a specific script
 ```
 
 ## Usage
 
-All commands are run from the `seminar/` directory.
+All commands are run from the `src/` directory.
 
 ### 1. Train Models
 
@@ -136,7 +136,7 @@ Attack scripts produce:
 ## Project Structure
 
 ```
-seminar/
+src/
   config.py                  # Central hyperparameters and constants
   models/
     deepar.py                # DeepARLSTM model
